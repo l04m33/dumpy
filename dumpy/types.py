@@ -190,7 +190,11 @@ class CompoundStructMixin(dict):
             if not isinstance(val, list):
                 val = [val]
             for v in val:
-                v.pack_into(buf, offset)
+                try:
+                    v.pack_into(buf, offset)
+                except AttributeError:
+                    v = ftype(v)
+                    v.pack_into(buf, offset)
                 offset += v.size()
 
     @classmethod

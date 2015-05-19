@@ -132,3 +132,7 @@ class TestCompoundStructMeta(unittest.TestCase):
         self.assertEqual(m.pack(), b'\x7e\x7f\x01\x02')
         self.assertEqual(Msg.unpack(m.pack()), m)
         self.assertEqual(Msg.unpack(m.pack()).pack(), m.pack())
+
+        b = bytearray(6)
+        m.pack_into(b, 2)
+        self.assertEqual(b, b'\x00\x00\x7e\x7f\x01\x02')
