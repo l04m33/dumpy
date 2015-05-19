@@ -1,23 +1,36 @@
 import struct
+import collections
 from .config import ENDIAN
 
 
 class StructMixin:
     def pack(self):
-        return self.__struct__.pack(self)
+        if isinstance(self, collections.Iterable):
+            return self.__struct__.pack(*self)
+        else:
+            return self.__struct__.pack(self)
 
     def pack_into(self, buf, offset=0):
-        self.__struct__.pack_into(buf, offset, self)
+        if isinstance(self, collections.Iterable):
+            self.__struct__.pack_into(buf, offset, *self)
+        else:
+            self.__struct__.pack_into(buf, offset, self)
 
     @classmethod
     def unpack(cls, buf):
-        (value,) = cls.__struct__.unpack(buf)
-        return cls(value)
+        if issubclass(cls, collections.Iterable):
+            return cls(cls.__struct__.unpack(buf))
+        else:
+            (value,) = cls.__struct__.unpack(buf)
+            return cls(value)
 
     @classmethod
     def unpack_from(cls, buf, offset=0):
-        (value,) = cls.__struct__.unpack_from(buf, offset)
-        return cls(value)
+        if issubclass(cls, collections.Iterable):
+            return cls(cls.__struct__.unpack_from(buf, offset))
+        else:
+            (value,) = cls.__struct__.unpack_from(buf, offset)
+            return cls(value)
 
     @classmethod
     def size(cls):
@@ -92,22 +105,23 @@ class NoDefault:
         raise RuntimeError('NoDefault cannot be instantiated')
 
 
+def field(name, tp, count=1, default=NoDefault):
+    return (name, tp, count, default)
+
+
 class CompoundStructMixin(dict):
     def _get_field(self, fname, count, default):
         if count > 1:
             val_list = self.get(fname, [])
             real_count = len(val_list)
-            # XXX: May not need to check the size here
+            # We checked this in __setitem__, but a newly created object may
+            # still have insufficient values to pack.
             if real_count < count:
                 if default is NoDefault:
                     raise ValueError(
                         'Expected {} values for field {}, '
                         'but got {}'.format(count, repr(fname), real_count))
                 val_list += ([default] * (count - real_count))
-            elif real_count > count:
-                raise ValueError(
-                    'Expected {} values for field {}, '
-                    'but got {}'.format(count, repr(fname), real_count))
             return val_list
         else:
             if default is NoDefault:
