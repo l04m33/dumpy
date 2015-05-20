@@ -5,20 +5,20 @@ from .config import ENDIAN
 
 class StructMixin:
     def pack(self):
-        if isinstance(self, collections.Iterable):
+        if isinstance(self, collections.Sequence):
             return self.__struct__.pack(*self)
         else:
             return self.__struct__.pack(self)
 
     def pack_into(self, buf, offset=0):
-        if isinstance(self, collections.Iterable):
+        if isinstance(self, collections.Sequence):
             self.__struct__.pack_into(buf, offset, *self)
         else:
             self.__struct__.pack_into(buf, offset, self)
 
     @classmethod
     def unpack(cls, buf):
-        if issubclass(cls, collections.Iterable):
+        if issubclass(cls, collections.Sequence):
             return cls(cls.__struct__.unpack(buf))
         else:
             (value,) = cls.__struct__.unpack(buf)
@@ -26,7 +26,7 @@ class StructMixin:
 
     @classmethod
     def unpack_from(cls, buf, offset=0):
-        if issubclass(cls, collections.Iterable):
+        if issubclass(cls, collections.Sequence):
             return cls(cls.__struct__.unpack_from(buf, offset))
         else:
             (value,) = cls.__struct__.unpack_from(buf, offset)
