@@ -76,6 +76,8 @@ class CompositeStructMixin:
                         raise ValueError(
                             'Expected {} values for field {}, '
                             'but got {}'.format(count, repr(fname), real_count))
+                    elif callable(default):
+                        default = default(self)
                     val_list += ([default] * (count - real_count))
                 elif real_count > count:
                     # val_list is mutable, so we check this again, just to
@@ -88,10 +90,9 @@ class CompositeStructMixin:
                 if default is NoDefault:
                     field_val = super().__getitem__(fname)
                 else:
-                    try:
-                        field_val = super().__getitem__(fname)
-                    except KeyError:
-                        field_val = default
+                    if callable(default):
+                        default = default(self)
+                    field_val = self._safe_get(fname, default)
                 return field_val
 
     def __getitem__(self, fname):

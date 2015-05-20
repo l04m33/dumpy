@@ -142,25 +142,24 @@ class TestCompositeDumpyMeta(unittest.TestCase):
     def test_variable_length_field(self):
         class A(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
-                dtypes.field('len', dtypes.Int8),
+                dtypes.field('len', dtypes.Int8,
+                             default=lambda o: len(o['numbers'])),
                 dtypes.field('numbers', dtypes.Int8, lambda o: o['len']),
             )
 
         a = A()
+        self.assertEqual(a['len'], 0)
 
         with self.assertRaises(TypeError):
             a['numbers'] = 1
 
         a['numbers'] = [1, 2, 3, 4]
-        a['len'] = len(a['numbers'])
+        self.assertEqual(a['len'], 4)
         self.assertEqual(a.pack(), b'\x04\x01\x02\x03\x04')
-        self.assertEqual(A.unpack(a.pack()), a)
         self.assertEqual(A.unpack(a.pack()).pack(), a.pack())
 
         a['numbers'] = []
-        a['len'] = 0
         self.assertEqual(a.pack(), b'\x00')
-        self.assertEqual(A.unpack(a.pack()), a)
         self.assertEqual(A.unpack(a.pack()).pack(), a.pack())
 
         self.assertEqual(
