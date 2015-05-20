@@ -61,7 +61,7 @@ class TestArray(unittest.TestCase):
 
 class TestCompoundStructMeta(unittest.TestCase):
     def test_field_specs(self):
-        class A(metaclass=dtypes.CompoundStructMeta):
+        class A(dict, metaclass=dtypes.StructMeta):
             __field_specs__ = (
                 dtypes.field('field1', dtypes.Int8),
                 dtypes.field('field2', dtypes.Int8, default=9),
@@ -103,18 +103,18 @@ class TestCompoundStructMeta(unittest.TestCase):
         self.assertEqual(data, b'\x7f\x0a\x01\x02\x03\x04\x02\x02\x02\x02')
 
     def test_multi_level_compound(self):
-        class Header(metaclass=dtypes.CompoundStructMeta):
+        class Header(dict, metaclass=dtypes.StructMeta):
             __field_specs__ = (
                 dtypes.field('field1', dtypes.Int8),
                 dtypes.field('field2', dtypes.Int8),
             )
 
-        class Body(metaclass=dtypes.CompoundStructMeta):
+        class Body(dict, metaclass=dtypes.StructMeta):
             __field_specs__ = (
                 dtypes.field('field', dtypes.Int8),
             )
 
-        class Msg(metaclass=dtypes.CompoundStructMeta):
+        class Msg(dict, metaclass=dtypes.StructMeta):
             __field_specs__ = (
                 dtypes.field('header', Header),
                 dtypes.field('bodies', Body, count=2),
