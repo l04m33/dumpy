@@ -3,26 +3,26 @@ import dumpy.config as dconfig
 import dumpy.types as dtypes
 
 
-class TestStructMeta(unittest.TestCase):
+class TestDumpyMeta(unittest.TestCase):
     def test_format_endian(self):
-        class A(int, metaclass=dtypes.StructMeta):
+        class A(int, metaclass=dtypes.DumpyMeta):
             __format__ = '<i'
         self.assertEqual(A.__struct__.format, b'<i')
 
-        class A(int, metaclass=dtypes.StructMeta):
+        class A(int, metaclass=dtypes.DumpyMeta):
             __format__ = '>i'
         self.assertEqual(A.__struct__.format, b'>i')
 
-        class A(int, metaclass=dtypes.StructMeta):
+        class A(int, metaclass=dtypes.DumpyMeta):
             __format__ = 'i'
         self.assertTrue(
             chr(A.__struct__.format[0]) in ['@', '=', '<', '>', '!'])
         self.assertEqual(A.__struct__.format[1], ord('i'))
 
     def test_base_class(self):
-        class A(int, metaclass=dtypes.StructMeta):
+        class A(int, metaclass=dtypes.DumpyMeta):
             __format__ = 'i'
-        self.assertTrue(issubclass(A, dtypes.StructMixin))
+        self.assertTrue(issubclass(A, dtypes.PrimitiveStructMixin))
 
 
 class TestInt8(unittest.TestCase):
@@ -49,7 +49,7 @@ class TestInt8(unittest.TestCase):
 
 class TestArray(unittest.TestCase):
     def test_array(self):
-        class ByteArray(tuple, metaclass=dtypes.StructMeta):
+        class ByteArray(tuple, metaclass=dtypes.DumpyMeta):
             __format__ = '4B'
 
         b = ByteArray((1, 2, 3, 4))
@@ -59,9 +59,9 @@ class TestArray(unittest.TestCase):
         self.assertEqual(ByteArray.unpack(b.pack()).pack(), b.pack())
 
 
-class TestCompoundStructMeta(unittest.TestCase):
+class TestCompositeDumpyMeta(unittest.TestCase):
     def test_field_specs(self):
-        class A(dict, metaclass=dtypes.StructMeta):
+        class A(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
                 dtypes.field('field1', dtypes.Int8),
                 dtypes.field('field2', dtypes.Int8, default=9),
@@ -69,7 +69,7 @@ class TestCompoundStructMeta(unittest.TestCase):
                 dtypes.field('field4', dtypes.Int8, 4, 1),
             )
 
-        self.assertTrue(issubclass(A, dtypes.CompoundStructMixin))
+        self.assertTrue(issubclass(A, dtypes.CompositeStructMixin))
 
         a = A()
         with self.assertRaises(KeyError):
@@ -102,19 +102,19 @@ class TestCompoundStructMeta(unittest.TestCase):
         data = a.pack()
         self.assertEqual(data, b'\x7f\x0a\x01\x02\x03\x04\x02\x02\x02\x02')
 
-    def test_multi_level_compound(self):
-        class Header(dict, metaclass=dtypes.StructMeta):
+    def test_multi_level_composite(self):
+        class Header(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
                 dtypes.field('field1', dtypes.Int8),
                 dtypes.field('field2', dtypes.Int8),
             )
 
-        class Body(dict, metaclass=dtypes.StructMeta):
+        class Body(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
                 dtypes.field('field', dtypes.Int8),
             )
 
-        class Msg(dict, metaclass=dtypes.StructMeta):
+        class Msg(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
                 dtypes.field('header', Header),
                 dtypes.field('bodies', Body, count=2),

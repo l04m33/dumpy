@@ -3,7 +3,7 @@ import collections
 from .config import ENDIAN
 
 
-class StructMixin:
+class PrimitiveStructMixin:
     def pack(self):
         return self.__struct__.pack(self)
 
@@ -45,109 +45,6 @@ class SequenceStructMixin:
         return cls.__struct__.size
 
 
-class StructMeta(type):
-    def __new__(cls, clsname, bases, clsdict):
-        if any([issubclass(c, collections.Mapping) for c in bases]):
-            return cls._new_composite(cls, clsname, bases, clsdict)
-        elif any([issubclass(c, collections.Sequence) for c in bases]):
-            return cls._new_sequence(cls, clsname, bases, clsdict)
-        else:
-            return cls._new_primitive(cls, clsname, bases, clsdict)
-
-    def _normalize_format(fmt, clsdict):
-        first_char = fmt[0]
-        if isinstance(first_char, int):
-            first_char = chr(first_char)
-
-        if first_char not in ['@', '=', '<', '>', '!']:
-            try:
-                endian = clsdict['__endian__']
-            except KeyError:
-                endian = ENDIAN
-            return (endian + fmt)
-        else:
-            return fmt
-
-    def _new_simple(cls, clsname, bases, clsdict):
-        try:
-            fmt = clsdict['__format__']
-        except KeyError:
-            # No meta data, do not process this class
-            return super().__new__(cls, clsname, bases, clsdict)
-
-        fmt = cls._normalize_format(fmt, clsdict)
-        clsdict['__struct__'] = struct.Struct(fmt)
-
-        return super().__new__(cls, clsname, bases, clsdict)
-
-    def _new_primitive(cls, clsname, bases, clsdict):
-        if StructMixin not in bases:
-            bases = (StructMixin,) + bases
-        return cls._new_simple(cls, clsname, bases, clsdict)
-
-    def _new_sequence(cls, clsname, bases, clsdict):
-        if SequenceStructMixin not in bases:
-            bases = (SequenceStructMixin,) + bases
-        return cls._new_simple(cls, clsname, bases, clsdict)
-
-    def _new_composite(cls, clsname, bases, clsdict):
-        try:
-            fields = clsdict['__field_specs__']
-        except KeyError:
-            # No meta data, do not process this class
-            return super().__new__(cls, clsname, bases, clsdict)
-
-        __fields__ = []
-        __field_info__ = {}
-        for fname, ftype, count, default in fields:
-            if count < 1:
-                raise ValueError(
-                    'Value count for field {} is invalid'.format(repr(fname)))
-            __fields__.append(fname)
-            __field_info__[fname] = (ftype, count, default)
-
-        clsdict['__fields__'] = __fields__
-        clsdict['__field_info__'] = __field_info__
-
-        if CompoundStructMixin not in bases:
-            bases = (CompoundStructMixin,) + bases
-
-        new_cls = super().__new__(cls, clsname, bases, clsdict)
-        return new_cls
-
-
-class Int8(int, metaclass=StructMeta):
-    __format__ = 'b'
-
-
-class UInt8(int, metaclass=StructMeta):
-    __format__ = 'B'
-
-
-class Int16(int, metaclass=StructMeta):
-    __format__ = 'h'
-
-
-class UInt16(int, metaclass=StructMeta):
-    __format__ = 'H'
-
-
-class Int32(int, metaclass=StructMeta):
-    __format__ = 'i'
-
-
-class UInt32(int, metaclass=StructMeta):
-    __format__ = 'I'
-
-
-class Float(float, metaclass=StructMeta):
-    __format__ = 'f'
-
-
-class Double(float, metaclass=StructMeta):
-    __format__ = 'd'
-
-
 class NoDefault:
     def __init__(self):
         raise RuntimeError('NoDefault cannot be instantiated')
@@ -157,7 +54,7 @@ def field(name, tp, count=1, default=NoDefault):
     return (name, tp, count, default)
 
 
-class CompoundStructMixin:
+class CompositeStructMixin:
     def _get_field(self, fname, count, default):
         if count > 1:
             val_list = self.get(fname, [])
@@ -278,3 +175,106 @@ class CompoundStructMixin:
             ftype, count, _default = info
             size += (ftype.size() * count)
         return size
+
+
+class DumpyMeta(type):
+    def __new__(cls, clsname, bases, clsdict):
+        if any([issubclass(c, collections.Mapping) for c in bases]):
+            return cls._new_composite(cls, clsname, bases, clsdict)
+        elif any([issubclass(c, collections.Sequence) for c in bases]):
+            return cls._new_sequence(cls, clsname, bases, clsdict)
+        else:
+            return cls._new_primitive(cls, clsname, bases, clsdict)
+
+    def _normalize_format(fmt, clsdict):
+        first_char = fmt[0]
+        if isinstance(first_char, int):
+            first_char = chr(first_char)
+
+        if first_char not in ['@', '=', '<', '>', '!']:
+            try:
+                endian = clsdict['__endian__']
+            except KeyError:
+                endian = ENDIAN
+            return (endian + fmt)
+        else:
+            return fmt
+
+    def _new_simple(cls, clsname, bases, clsdict):
+        try:
+            fmt = clsdict['__format__']
+        except KeyError:
+            # No meta data, do not process this class
+            return super().__new__(cls, clsname, bases, clsdict)
+
+        fmt = cls._normalize_format(fmt, clsdict)
+        clsdict['__struct__'] = struct.Struct(fmt)
+
+        return super().__new__(cls, clsname, bases, clsdict)
+
+    def _new_primitive(cls, clsname, bases, clsdict):
+        if PrimitiveStructMixin not in bases:
+            bases = (PrimitiveStructMixin,) + bases
+        return cls._new_simple(cls, clsname, bases, clsdict)
+
+    def _new_sequence(cls, clsname, bases, clsdict):
+        if SequenceStructMixin not in bases:
+            bases = (SequenceStructMixin,) + bases
+        return cls._new_simple(cls, clsname, bases, clsdict)
+
+    def _new_composite(cls, clsname, bases, clsdict):
+        try:
+            fields = clsdict['__field_specs__']
+        except KeyError:
+            # No meta data, do not process this class
+            return super().__new__(cls, clsname, bases, clsdict)
+
+        __fields__ = []
+        __field_info__ = {}
+        for fname, ftype, count, default in fields:
+            if count < 1:
+                raise ValueError(
+                    'Value count for field {} is invalid'.format(repr(fname)))
+            __fields__.append(fname)
+            __field_info__[fname] = (ftype, count, default)
+
+        clsdict['__fields__'] = __fields__
+        clsdict['__field_info__'] = __field_info__
+
+        if CompositeStructMixin not in bases:
+            bases = (CompositeStructMixin,) + bases
+
+        new_cls = super().__new__(cls, clsname, bases, clsdict)
+        return new_cls
+
+
+class Int8(int, metaclass=DumpyMeta):
+    __format__ = 'b'
+
+
+class UInt8(int, metaclass=DumpyMeta):
+    __format__ = 'B'
+
+
+class Int16(int, metaclass=DumpyMeta):
+    __format__ = 'h'
+
+
+class UInt16(int, metaclass=DumpyMeta):
+    __format__ = 'H'
+
+
+class Int32(int, metaclass=DumpyMeta):
+    __format__ = 'i'
+
+
+class UInt32(int, metaclass=DumpyMeta):
+    __format__ = 'I'
+
+
+class Float(float, metaclass=DumpyMeta):
+    __format__ = 'f'
+
+
+class Double(float, metaclass=DumpyMeta):
+    __format__ = 'd'
