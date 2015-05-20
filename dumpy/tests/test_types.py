@@ -138,3 +138,30 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         self.assertEqual(b, b'\x00\x00\x7e\x7f\x01\x02')
         m2 = Msg.unpack_from(b, 2)
         self.assertEqual(m, m2)
+
+    def test_variable_length_field(self):
+        class A(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('len', dtypes.Int8),
+                dtypes.field('numbers', dtypes.Int8, lambda o: o['len']),
+            )
+
+        a = A()
+
+        with self.assertRaises(TypeError):
+            a['numbers'] = 1
+
+        a['numbers'] = [1, 2, 3, 4]
+        a['len'] = len(a['numbers'])
+        self.assertEqual(a.pack(), b'\x04\x01\x02\x03\x04')
+        self.assertEqual(A.unpack(a.pack()), a)
+        self.assertEqual(A.unpack(a.pack()).pack(), a.pack())
+
+        a['numbers'] = []
+        a['len'] = 0
+        self.assertEqual(a.pack(), b'\x00')
+        self.assertEqual(A.unpack(a.pack()), a)
+        self.assertEqual(A.unpack(a.pack()).pack(), a.pack())
+
+        self.assertEqual(
+            A.unpack_from(b'\x02\x01\x02\x03\x04').pack(), b'\x02\x01\x02')

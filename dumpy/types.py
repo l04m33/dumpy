@@ -55,28 +55,44 @@ def field(name, tp, count=1, default=NoDefault):
 
 
 class CompositeStructMixin:
+    def _safe_get(self, fname, default=None):
+        try:
+            return super().__getitem__(fname)
+        except KeyError:
+            return default
+
     def _get_field(self, fname, count, default):
-        if count > 1:
-            val_list = self.get(fname, [])
-            real_count = len(val_list)
-            # We checked this in __setitem__, but a newly created object may
-            # still have insufficient values to pack.
-            if real_count < count:
-                if default is NoDefault:
+        if callable(count):
+            # variable length
+            return self._safe_get(fname, [])
+        else:
+            if count > 1:
+                val_list = self._safe_get(fname, [])
+                real_count = len(val_list)
+                # We checked this in __setitem__, but a newly created object may
+                # still have insufficient values to pack.
+                if real_count < count:
+                    if default is NoDefault:
+                        raise ValueError(
+                            'Expected {} values for field {}, '
+                            'but got {}'.format(count, repr(fname), real_count))
+                    val_list += ([default] * (count - real_count))
+                elif real_count > count:
+                    # val_list is mutable, so we check this again, just to
+                    # be sure
                     raise ValueError(
                         'Expected {} values for field {}, '
                         'but got {}'.format(count, repr(fname), real_count))
-                val_list += ([default] * (count - real_count))
-            return val_list
-        else:
-            if default is NoDefault:
-                field_val = super().__getitem__(fname)
+                return val_list
             else:
-                try:
+                if default is NoDefault:
                     field_val = super().__getitem__(fname)
-                except KeyError:
-                    field_val = default
-            return field_val
+                else:
+                    try:
+                        field_val = super().__getitem__(fname)
+                    except KeyError:
+                        field_val = default
+                return field_val
 
     def __getitem__(self, fname):
         ftype, count, default = self.__field_info__[fname]
@@ -85,26 +101,30 @@ class CompositeStructMixin:
     def __setitem__(self, fname, value):
         ftype, count, default = self.__field_info__[fname]
 
-        if count > 1:
+        if callable(count):
             if not isinstance(value, list):
                 raise TypeError('Field {} needs a list'.format(repr(fname)))
-            if len(value) > count:
-                raise ValueError(
-                    'Field {} needs {} values, but got {}'.format(
-                        repr(fname), count, len(value)))
-            elif len(value) < count and default is NoDefault:
-                raise ValueError(
-                    'Field {} needs {} values, but got {}'.format(
-                        repr(fname), count, len(value)))
-
             super().__setitem__(fname, value)
-
         else:
-            if isinstance(value, list):
-                raise TypeError(
-                    'Field {} cannot accept a list'.format(repr(fname)))
+            if count > 1:
+                if not isinstance(value, list):
+                    raise TypeError('Field {} needs a list'.format(repr(fname)))
+                if len(value) > count:
+                    raise ValueError(
+                        'Field {} needs {} values, but got {}'.format(
+                            repr(fname), count, len(value)))
+                elif len(value) < count and default is NoDefault:
+                    raise ValueError(
+                        'Field {} needs {} values, but got {}'.format(
+                            repr(fname), count, len(value)))
 
-            super().__setitem__(fname, value)
+                super().__setitem__(fname, value)
+            else:
+                if isinstance(value, list):
+                    raise TypeError(
+                        'Field {} cannot accept a list'.format(repr(fname)))
+
+                super().__setitem__(fname, value)
 
     def pack(self):
         bin_list = []
@@ -145,9 +165,6 @@ class CompositeStructMixin:
     @classmethod
     def unpack(cls, buf):
         obj = cls.unpack_from(buf, 0)
-        if obj.size() < len(buf):
-            raise ValueError(
-                '{} trailing bytes in buffer'.format(len(buf) - obj.size()))
         return obj
 
     @classmethod
@@ -155,16 +172,25 @@ class CompositeStructMixin:
         obj = cls()
         for fname in cls.__fields__:
             ftype, count, _default = cls.__field_info__[fname]
+
+            if callable(count):
+                real_count = count(obj)
+            else:
+                real_count = count
+
             val_list = []
-            for i in range(count):
+            for i in range(real_count):
                 v = ftype.unpack_from(buf, offset)
                 offset += v.size()
                 val_list.append(v)
 
-            if len(val_list) > 1:
+            if callable(count):
                 obj[fname] = val_list
             else:
-                obj[fname] = val_list[0]
+                if len(val_list) > 1:
+                    obj[fname] = val_list
+                else:
+                    obj[fname] = val_list[0]
 
         return obj
 
@@ -232,7 +258,7 @@ class DumpyMeta(type):
         __fields__ = []
         __field_info__ = {}
         for fname, ftype, count, default in fields:
-            if count < 1:
+            if not callable(count) and count < 1:
                 raise ValueError(
                     'Value count for field {} is invalid'.format(repr(fname)))
             __fields__.append(fname)
