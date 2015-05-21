@@ -231,12 +231,12 @@ class CompositeStructMixin:
                 val_list.append(v)
 
             if callable(count):
-                obj[fname] = val_list
+                super().__setitem__(obj, fname, val_list)
             else:
                 if len(val_list) > 1:
-                    obj[fname] = val_list
+                    super().__setitem__(obj, fname, val_list)
                 elif len(val_list) == 1:
-                    obj[fname] = val_list[0]
+                    super().__setitem__(obj, fname, val_list[0])
 
         return obj
 
