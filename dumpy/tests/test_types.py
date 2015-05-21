@@ -168,8 +168,9 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         class A(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
                 dtypes.field('len', dtypes.Int8,
-                             default=lambda o: len(o['numbers'])),
-                dtypes.field('numbers', dtypes.Int8, lambda o: o['len']),
+                             default=dtypes.count_of('numbers')),
+                dtypes.field('numbers', dtypes.Int8,
+                             count=dtypes.counted_by('len')),
             )
 
         a = A()

@@ -54,6 +54,18 @@ def field(name, tp, count=1, default=NoDefault):
     return (name, tp, count, default)
 
 
+def counted_by(name):
+    def counted_by_func(obj):
+        return obj[name]
+    return counted_by_func
+
+
+def count_of(name):
+    def count_of_func(obj):
+        return len(obj[name])
+    return count_of_func
+
+
 class CompositeStructMixin:
     def _safe_get(self, fname, default=None):
         try:
