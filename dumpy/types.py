@@ -109,7 +109,7 @@ class CompositeStructMixin:
                         'Expected {} values for field {}, '
                         'but got {}'.format(count, repr(fname), real_count))
                 return val_list
-            else:
+            elif count == 1:
                 if default is NoDefault:
                     field_val = super().__getitem__(fname)
                 else:
@@ -117,10 +117,15 @@ class CompositeStructMixin:
                         default = default(self)
                     field_val = self._safe_get(fname, default)
                 return field_val
+            else:
+                return None
 
     def __getitem__(self, fname):
         _ftype, count, default = self.__field_info__[fname]
-        return self._get_field(fname, count, default)
+        ret = self._get_field(fname, count, default)
+        if ret is None:
+            raise ValueError('Field {} cannot be read'.format(fname))
+        return ret
 
     def __setitem__(self, fname, value):
         _ftype, count, default = self.__field_info__[fname]
@@ -143,18 +148,24 @@ class CompositeStructMixin:
                             repr(fname), count, len(value)))
 
                 super().__setitem__(fname, value)
-            else:
+            elif count == 1:
                 if isinstance(value, list):
                     raise TypeError(
                         'Field {} cannot accept a list'.format(repr(fname)))
 
                 super().__setitem__(fname, value)
+            else:
+                raise ValueError('No space for field {}'.format(repr(fname)))
 
     def pack(self):
         bin_list = []
         for fname in self.__fields__:
             ftype, count, default = self.__field_info__[fname]
             val = self._get_field(fname, count, default)
+
+            if val is None:
+                continue
+
             if not isinstance(val, list):
                 val = [val]
             for v in val:
@@ -178,6 +189,10 @@ class CompositeStructMixin:
         for fname in self.__fields__:
             ftype, count, default = self.__field_info__[fname]
             val = self._get_field(fname, count, default)
+
+            if val is None:
+                continue
+
             if not isinstance(val, list):
                 val = [val]
             for v in val:
@@ -220,7 +235,7 @@ class CompositeStructMixin:
             else:
                 if len(val_list) > 1:
                     obj[fname] = val_list
-                else:
+                elif len(val_list) == 1:
                     obj[fname] = val_list[0]
 
         return obj
@@ -235,8 +250,11 @@ class CompositeStructMixin:
     def size(self):
         size = 0
         for fname in self.__fields__:
-            ftype, count, _default = self.__field_info__[fname]
-            val = self[fname]
+            ftype, count, default = self.__field_info__[fname]
+            val = self._get_field(fname, count, default)
+
+            if val is None:
+                continue
 
             if isinstance(ftype, VariableType):
                 ftype = ftype.get_type(self)
@@ -305,9 +323,6 @@ class DumpyMeta(type):
         __fields__ = []
         __field_info__ = {}
         for fname, ftype, count, default in fields:
-            if not callable(count) and count < 1:
-                raise ValueError(
-                    'Value count for field {} is invalid'.format(repr(fname)))
             __fields__.append(fname)
             __field_info__[fname] = (ftype, count, default)
 

@@ -118,11 +118,24 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         data = a.pack()
         self.assertEqual(data, b'\x7f\x0a\x01\x02\x03\x04\x02\x02\x02\x02')
 
+        class B(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('field', dtypes.Int8, count=0),
+            )
+
+        b = B()
+        self.assertEqual(b.size, 0)
         with self.assertRaises(ValueError):
-            class B(dict, metaclass=dtypes.DumpyMeta):
-                __field_specs__ = (
-                    dtypes.field('field', dtypes.Int8, count=0),
-                )
+            b['field'] = 0
+        with self.assertRaises(ValueError):
+            b['field']
+
+        self.assertEqual(B.unpack(b''), {})
+        self.assertEqual(B.unpack_from(b'\x00\x00'), {})
+        self.assertEqual(b.pack(), b'')
+        bb = bytearray(b'\x7e\x7f')
+        b.pack_into(bb, 1)
+        self.assertEqual(bb, b'\x7e\x7f')
 
     def test_multi_level_composite(self):
         class Header(dict, metaclass=dtypes.DumpyMeta):
