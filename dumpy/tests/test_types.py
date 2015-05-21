@@ -156,8 +156,12 @@ class TestCompositeDumpyMeta(unittest.TestCase):
             )
 
         m = Msg()
-        m['header'] = Header()
+        m['header'] = {'field1': 0, 'field2': 0}
         m['bodies'] = [Body(), Body()]
+
+        self.assertEqual(m['header'].parent, m)
+        self.assertEqual(m['bodies'][0].parent, m)
+        self.assertEqual(m['bodies'][1].parent, m)
 
         m['header']['field1'] = 0x7e
         m['header']['field2'] = 0x7f
@@ -284,9 +288,3 @@ class TestCompositeDumpyMeta(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             a['field'] = [1, 2, 3, 4, 5]
-
-        l = [1, 2, 3, 4]
-        a['field'] = l
-        l.append(5)
-        with self.assertRaises(ValueError):
-            a['field']
