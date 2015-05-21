@@ -1,4 +1,5 @@
 import unittest
+import random
 import dumpy.config as dconfig
 import dumpy.types as dtypes
 
@@ -29,7 +30,7 @@ class TestInt8(unittest.TestCase):
     def test_int8(self):
         i = dtypes.Int8(0x7f)
 
-        self.assertEqual(i.size(), 1)
+        self.assertEqual(i.size, 1)
 
         self.assertEqual(i.pack(), b'\x7f')
         self.assertEqual(dtypes.Int8.unpack(i.pack()), 0x7f)
@@ -53,10 +54,16 @@ class TestArray(unittest.TestCase):
             __format__ = '4B'
 
         b = ByteArray((1, 2, 3, 4))
-        self.assertEqual(b.size(), 4)
+        self.assertEqual(b.size, 4)
         self.assertEqual(b.pack(), b'\x01\x02\x03\x04')
         self.assertEqual(ByteArray.unpack(b.pack()), b)
         self.assertEqual(ByteArray.unpack(b.pack()).pack(), b.pack())
+
+        bb = bytearray(6)
+        b.pack_into(bb, 1)
+        self.assertEqual(bb, b'\x00\x01\x02\x03\x04\x00')
+        self.assertEqual(ByteArray.unpack_from(bb, 1), b)
+        self.assertEqual(ByteArray.unpack_from(bb, 1).pack(), b.pack())
 
 
 class TestCompositeDumpyMeta(unittest.TestCase):
@@ -72,6 +79,7 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         self.assertTrue(issubclass(A, dtypes.CompositeStructMixin))
 
         a = A()
+
         with self.assertRaises(KeyError):
             a.pack()
 
@@ -101,6 +109,12 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         a['field4'] = [2, 2, 2, 2]
         data = a.pack()
         self.assertEqual(data, b'\x7f\x0a\x01\x02\x03\x04\x02\x02\x02\x02')
+
+        with self.assertRaises(ValueError):
+            class B(dict, metaclass=dtypes.DumpyMeta):
+                __field_specs__ = (
+                    dtypes.field('field', dtypes.Int8, count=0),
+                )
 
     def test_multi_level_composite(self):
         class Header(dict, metaclass=dtypes.DumpyMeta):
@@ -139,6 +153,9 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         m2 = Msg.unpack_from(b, 2)
         self.assertEqual(m, m2)
 
+        with self.assertRaises(ValueError):
+            m.pack_into(b, 3)
+
     def test_variable_length_field(self):
         class A(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
@@ -164,3 +181,22 @@ class TestCompositeDumpyMeta(unittest.TestCase):
 
         self.assertEqual(
             A.unpack_from(b'\x02\x01\x02\x03\x04').pack(), b'\x02\x01\x02')
+
+    def test_dynamic_default(self):
+        i = 0
+        def dyn_default(_obj):
+            nonlocal i
+            i += 1
+            return i
+
+        class A(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('misc', dtypes.UInt8,
+                             count=4,
+                             default=dyn_default),
+            )
+
+        a = A()
+        self.assertEqual(a['misc'], [1, 2, 3, 4])
+        i = 0
+        self.assertEqual(a.pack(), b'\x01\x02\x03\x04')

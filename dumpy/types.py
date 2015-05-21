@@ -20,9 +20,9 @@ class PrimitiveStructMixin:
         (value,) = cls.__struct__.unpack_from(buf, offset)
         return cls(value)
 
-    @classmethod
-    def size(cls):
-        return cls.__struct__.size
+    @property
+    def size(self):
+        return self.__struct__.size
 
 
 class SequenceStructMixin:
@@ -40,9 +40,9 @@ class SequenceStructMixin:
     def unpack_from(cls, buf, offset=0):
         return cls(cls.__struct__.unpack_from(buf, offset))
 
-    @classmethod
-    def size(cls):
-        return cls.__struct__.size
+    @property
+    def size(self):
+        return self.__struct__.size
 
 
 class NoDefault:
@@ -77,8 +77,11 @@ class CompositeStructMixin:
                             'Expected {} values for field {}, '
                             'but got {}'.format(count, repr(fname), real_count))
                     elif callable(default):
-                        default = default(self)
-                    val_list += ([default] * (count - real_count))
+                        default_list = \
+                            [default(self) for _i in range(count - real_count)]
+                    else:
+                        default_list = [default] * (count - real_count)
+                    val_list += default_list
                 elif real_count > count:
                     # val_list is mutable, so we check this again, just to
                     # be sure
@@ -144,7 +147,7 @@ class CompositeStructMixin:
         return b''.join(bin_list)
 
     def pack_into(self, buf, offset=0):
-        total_size = self.size()
+        total_size = self.size
         if len(buf[offset:]) < total_size:
             raise ValueError(
                 'pack_into needs {} bytes of space, but only got {}'.format(
@@ -161,7 +164,7 @@ class CompositeStructMixin:
                 except AttributeError:
                     v = ftype(v)
                     v.pack_into(buf, offset)
-                offset += v.size()
+                offset += v.size
 
     @classmethod
     def unpack(cls, buf):
@@ -182,7 +185,7 @@ class CompositeStructMixin:
             val_list = []
             for i in range(real_count):
                 v = ftype.unpack_from(buf, offset)
-                offset += v.size()
+                offset += v.size
                 val_list.append(v)
 
             if callable(count):
@@ -195,12 +198,23 @@ class CompositeStructMixin:
 
         return obj
 
-    @classmethod
-    def size(cls):
+    def _safe_size(self, v, ftype):
+        try:
+            return v.size
+        except AttributeError:
+            return ftype(v).size
+
+    @property
+    def size(self):
         size = 0
-        for _fname, info in cls.__field_info__.items():
-            ftype, count, _default = info
-            size += (ftype.size() * count)
+        for fname in self.__fields__:
+            ftype, count, _default = self.__field_info__[fname]
+            val = self[fname]
+            if isinstance(val, list):
+                for v in val:
+                    size += self._safe_size(v, ftype)
+            else:
+                size += self._safe_size(val, ftype)
         return size
 
 
