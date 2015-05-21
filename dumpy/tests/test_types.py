@@ -25,6 +25,14 @@ class TestDumpyMeta(unittest.TestCase):
             __format__ = 'i'
         self.assertTrue(issubclass(A, dtypes.PrimitiveStructMixin))
 
+    def test_exceptions(self):
+        class A(int, metaclass=dtypes.DumpyMeta): pass
+        self.assertFalse(issubclass(A, dtypes.PrimitiveStructMixin))
+
+        class A(int, metaclass=dtypes.DumpyMeta):
+            __format__ = b'<B'
+        self.assertEqual(A.__struct__.format, b'<B')
+
 
 class TestInt8(unittest.TestCase):
     def test_int8(self):
@@ -200,3 +208,29 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         self.assertEqual(a['misc'], [1, 2, 3, 4])
         i = 0
         self.assertEqual(a.pack(), b'\x01\x02\x03\x04')
+
+    def test_exceptions(self):
+        with self.assertRaises(RuntimeError):
+            dtypes.NoDefault()
+
+        class A(dict, metaclass=dtypes.DumpyMeta): pass
+        self.assertFalse(issubclass(A, dtypes.CompositeStructMixin))
+
+        class A(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('field', dtypes.UInt8, count=4),
+            )
+
+        a = A()
+
+        with self.assertRaises(KeyError):
+            a['not_a_field'] = 1
+
+        with self.assertRaises(ValueError):
+            a['field'] = [1, 2, 3, 4, 5]
+
+        l = [1, 2, 3, 4]
+        a['field'] = l
+        l.append(5)
+        with self.assertRaises(ValueError):
+            a['field']

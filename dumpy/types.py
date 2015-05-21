@@ -241,12 +241,15 @@ class DumpyMeta(type):
         else:
             return fmt
 
-    def _new_simple(cls, clsname, bases, clsdict):
+    def _new_simple(cls, clsname, bases, clsdict, extra_base):
         try:
             fmt = clsdict['__format__']
         except KeyError:
             # No meta data, do not process this class
             return super().__new__(cls, clsname, bases, clsdict)
+
+        if extra_base not in bases:
+            bases = (extra_base,) + bases
 
         fmt = cls._normalize_format(fmt, clsdict)
         clsdict['__struct__'] = struct.Struct(fmt)
@@ -254,14 +257,12 @@ class DumpyMeta(type):
         return super().__new__(cls, clsname, bases, clsdict)
 
     def _new_primitive(cls, clsname, bases, clsdict):
-        if PrimitiveStructMixin not in bases:
-            bases = (PrimitiveStructMixin,) + bases
-        return cls._new_simple(cls, clsname, bases, clsdict)
+        return cls._new_simple(
+            cls, clsname, bases, clsdict, PrimitiveStructMixin)
 
     def _new_sequence(cls, clsname, bases, clsdict):
-        if SequenceStructMixin not in bases:
-            bases = (SequenceStructMixin,) + bases
-        return cls._new_simple(cls, clsname, bases, clsdict)
+        return cls._new_simple(
+            cls, clsname, bases, clsdict, SequenceStructMixin)
 
     def _new_composite(cls, clsname, bases, clsdict):
         try:
