@@ -119,7 +119,7 @@ class CompositeStructMixin:
         if issubclass(ftype, CompositeStructMixin):
             if not isinstance(value, ftype):
                 value = ftype(value)
-            value.parent = self
+            value.parent = weakref.ref(self)
         return value
 
     def __getitem__(self, fname):

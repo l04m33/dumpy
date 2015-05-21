@@ -159,9 +159,9 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         m['header'] = {'field1': 0, 'field2': 0}
         m['bodies'] = [Body(), Body()]
 
-        self.assertEqual(m['header'].parent, m)
-        self.assertEqual(m['bodies'][0].parent, m)
-        self.assertEqual(m['bodies'][1].parent, m)
+        self.assertEqual(m['header'].parent(), m)
+        self.assertEqual(m['bodies'][0].parent(), m)
+        self.assertEqual(m['bodies'][1].parent(), m)
 
         m['header']['field1'] = 0x7e
         m['header']['field2'] = 0x7f
@@ -171,6 +171,12 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         self.assertEqual(m.pack(), b'\x7e\x7f\x01\x02')
         self.assertEqual(Msg.unpack(m.pack()), m)
         self.assertEqual(Msg.unpack(m.pack()).pack(), m.pack())
+
+        mm = Msg.unpack(m.pack())
+        mm['header']['field1'] = 0x7d
+        self.assertEqual(mm['header'].parent(), mm)
+        self.assertEqual(mm['bodies'][0].parent(), mm)
+        self.assertEqual(mm['bodies'][1].parent(), mm)
 
         b = bytearray(6)
         m.pack_into(b, 2)
