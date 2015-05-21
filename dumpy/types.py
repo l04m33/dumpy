@@ -66,6 +66,14 @@ def count_of(name):
     return count_of_func
 
 
+class VariableType:
+    def __init__(self, get_type):
+        self._get_type = get_type
+
+    def get_type(self, obj):
+        return self._get_type(obj)
+
+
 class CompositeStructMixin:
     def _safe_get(self, fname, default=None):
         try:
@@ -111,11 +119,11 @@ class CompositeStructMixin:
                 return field_val
 
     def __getitem__(self, fname):
-        ftype, count, default = self.__field_info__[fname]
+        _ftype, count, default = self.__field_info__[fname]
         return self._get_field(fname, count, default)
 
     def __setitem__(self, fname, value):
-        ftype, count, default = self.__field_info__[fname]
+        _ftype, count, default = self.__field_info__[fname]
 
         if callable(count):
             if not isinstance(value, list):
@@ -153,6 +161,8 @@ class CompositeStructMixin:
                 try:
                     packed = v.pack()
                 except AttributeError:
+                    if isinstance(ftype, VariableType):
+                        ftype = ftype.get_type(self)
                     packed = ftype(v).pack()
                 bin_list.append(packed)
 
@@ -174,6 +184,8 @@ class CompositeStructMixin:
                 try:
                     v.pack_into(buf, offset)
                 except AttributeError:
+                    if isinstance(ftype, VariableType):
+                        ftype = ftype.get_type(self)
                     v = ftype(v)
                     v.pack_into(buf, offset)
                 offset += v.size
@@ -193,6 +205,9 @@ class CompositeStructMixin:
                 real_count = count(obj)
             else:
                 real_count = count
+
+            if isinstance(ftype, VariableType):
+                ftype = ftype.get_type(obj)
 
             val_list = []
             for i in range(real_count):
@@ -222,6 +237,10 @@ class CompositeStructMixin:
         for fname in self.__fields__:
             ftype, count, _default = self.__field_info__[fname]
             val = self[fname]
+
+            if isinstance(ftype, VariableType):
+                ftype = ftype.get_type(self)
+
             if isinstance(val, list):
                 for v in val:
                     size += self._safe_size(v, ftype)

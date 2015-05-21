@@ -191,6 +191,48 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         self.assertEqual(
             A.unpack_from(b'\x02\x01\x02\x03\x04').pack(), b'\x02\x01\x02')
 
+    def test_variable_type(self):
+        def get_type(obj):
+            if obj['type'] == 0:
+                return dtypes.Int8
+            elif obj['type'] == 1:
+                return dtypes.Int32
+
+        class A(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('type', dtypes.Int8),
+                dtypes.field('data', dtypes.VariableType(get_type)),
+            )
+
+        a = A()
+        a['type'] = 0
+        a['data'] = 0x7f
+        self.assertEqual(a.size, 2)
+        self.assertEqual(a.pack(), b'\x00\x7f')
+        self.assertEqual(A.unpack(b'\x00\x7f'), a)
+        self.assertEqual(A.unpack(b'\x00\x7f').pack(), a.pack())
+
+        b = bytearray(4)
+        a.pack_into(b, 1)
+        self.assertEqual(b, b'\x00\x00\x7f\x00')
+
+        a['type'] = 1
+        self.assertEqual(a.size, 5)
+        if dconfig.ENDIAN == '<':
+            self.assertEqual(a.pack(), b'\x01\x7f\x00\x00\x00')
+            self.assertEqual(A.unpack(b'\x01\x7f\x00\x00\x00'), a)
+            self.assertEqual(A.unpack(b'\x01\x7f\x00\x00\x00').pack(), a.pack())
+            b = bytearray(7)
+            a.pack_into(b, 1)
+            self.assertEqual(b, b'\x00\x01\x7f\x00\x00\x00\x00')
+        elif dconfig.ENDIAN == '>':
+            self.assertEqual(a.pack(), b'\x01\x00\x00\x00\x7f')
+            self.assertEqual(A.unpack(b'\x01\x00\x00\x00\x7f'), a)
+            self.assertEqual(A.unpack(b'\x01\x00\x00\x00\x7f').pack(), a.pack())
+            b = bytearray(7)
+            a.pack_into(b, 1)
+            self.assertEqual(b, b'\x00\x01\x00\x00\x00\x7f\x00')
+
     def test_dynamic_default(self):
         i = 0
         def dyn_default(_obj):
