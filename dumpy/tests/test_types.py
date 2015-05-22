@@ -294,3 +294,8 @@ class TestCompositeDumpyMeta(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             a['field'] = [1, 2, 3, 4, 5]
+
+        a['field'] = [1, 2, 3, 4]
+        a['field'].append(5)
+        with self.assertRaises(ValueError):
+            a.pack()

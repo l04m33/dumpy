@@ -1,6 +1,6 @@
 import struct
-import collections
 import weakref
+from collections import abc
 from .config import ENDIAN
 
 
@@ -103,6 +103,12 @@ class CompositeStructMixin:
                     else:
                         default_list = [default] * (count - real_count)
                     val_list += default_list
+                elif real_count > count:
+                    # We checked this in __setitem__ too, but lists are mutable,
+                    # so we check again here, just to be sure.
+                    raise ValueError(
+                        'Expected {} values for field {}, '
+                        'but got {}'.format(count, repr(fname), real_count))
                 return val_list
             elif count == 1:
                 if default is NoDefault:
@@ -136,14 +142,16 @@ class CompositeStructMixin:
             ftype = ftype.get_type(self)
 
         if callable(count):
-            if not isinstance(value, list):
-                raise TypeError('Field {} needs a list'.format(repr(fname)))
+            if not isinstance(value, abc.Sequence):
+                raise TypeError(
+                    'Field {} needs a sequence'.format(repr(fname)))
             value = [self._normalize_composite(v, ftype) for v in value]
             super().__setitem__(fname, value)
         else:
             if count > 1:
-                if not isinstance(value, list):
-                    raise TypeError('Field {} needs a list'.format(repr(fname)))
+                if not isinstance(value, abc.Sequence):
+                    raise TypeError(
+                        'Field {} needs a sequence'.format(repr(fname)))
                 if len(value) > count:
                     raise ValueError(
                         'Field {} needs {} values, but got {}'.format(
@@ -156,9 +164,9 @@ class CompositeStructMixin:
                 value = [self._normalize_composite(v, ftype) for v in value]
                 super().__setitem__(fname, value)
             elif count == 1:
-                if isinstance(value, list):
+                if isinstance(value, abc.Sequence):
                     raise TypeError(
-                        'Field {} cannot accept a list'.format(repr(fname)))
+                        'Field {} cannot accept a sequence'.format(repr(fname)))
 
                 value = self._normalize_composite(value, ftype)
                 super().__setitem__(fname, value)
@@ -283,9 +291,9 @@ class CompositeStructMixin:
 
 class DumpyMeta(type):
     def __new__(cls, clsname, bases, clsdict):
-        if any([issubclass(c, collections.Mapping) for c in bases]):
+        if any([issubclass(c, abc.Mapping) for c in bases]):
             return cls._new_composite(cls, clsname, bases, clsdict)
-        elif any([issubclass(c, collections.Sequence) for c in bases]):
+        elif any([issubclass(c, abc.Sequence) for c in bases]):
             return cls._new_sequence(cls, clsname, bases, clsdict)
         else:
             return cls._new_primitive(cls, clsname, bases, clsdict)
