@@ -7,22 +7,22 @@ import dumpy.types as dtypes
 class TestDumpyMeta(unittest.TestCase):
     def test_format_endian(self):
         class A(int, metaclass=dtypes.DumpyMeta):
-            __format__ = '<i'
+            __spec__ = '<i'
         self.assertEqual(A.__struct__.format, b'<i')
 
         class A(int, metaclass=dtypes.DumpyMeta):
-            __format__ = '>i'
+            __spec__ = '>i'
         self.assertEqual(A.__struct__.format, b'>i')
 
         class A(int, metaclass=dtypes.DumpyMeta):
-            __format__ = 'i'
+            __spec__ = 'i'
         self.assertTrue(
             chr(A.__struct__.format[0]) in ['@', '=', '<', '>', '!'])
         self.assertEqual(A.__struct__.format[1], ord('i'))
 
     def test_base_class(self):
         class A(int, metaclass=dtypes.DumpyMeta):
-            __format__ = 'i'
+            __spec__ = 'i'
         self.assertTrue(issubclass(A, dtypes.PrimitiveStructMixin))
 
     def test_exceptions(self):
@@ -30,7 +30,7 @@ class TestDumpyMeta(unittest.TestCase):
         self.assertFalse(issubclass(A, dtypes.PrimitiveStructMixin))
 
         class A(int, metaclass=dtypes.DumpyMeta):
-            __format__ = b'<B'
+            __spec__ = b'<B'
         self.assertEqual(A.__struct__.format, b'<B')
 
 
@@ -59,7 +59,7 @@ class TestInt8(unittest.TestCase):
 class TestArray(unittest.TestCase):
     def test_array(self):
         class ByteArray(tuple, metaclass=dtypes.DumpyMeta):
-            __format__ = '4B'
+            __spec__ = '4B'
 
         b = ByteArray((1, 2, 3, 4))
         self.assertEqual(b.size, 4)
@@ -274,6 +274,23 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         self.assertEqual(a['misc'], [1, 2, 3, 4])
         i = 0
         self.assertEqual(a.pack(), b'\x01\x02\x03\x04')
+
+        class B(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('len', dtypes.UInt8,
+                             default=dtypes.count_of('data')),
+                dtypes.field('data', dtypes.UInt8,
+                             count=dtypes.counted_by('len')),
+            )
+
+        b = B.unpack_from(b'\x04\x01\x02\x03\x04\x05')
+        self.assertEqual(b['len'], 4)
+        self.assertEqual(b['data'], [1, 2, 3, 4])
+
+        b = B()
+        b['data'] = [3, 2, 1]
+        self.assertEqual(b['len'], 3)
+        self.assertEqual(b.pack(), b'\x03\x03\x02\x01')
 
     def test_exceptions(self):
         with self.assertRaises(RuntimeError):

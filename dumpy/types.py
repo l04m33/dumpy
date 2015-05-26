@@ -114,9 +114,11 @@ class CompositeStructMixin:
                 if default is NoDefault:
                     field_val = super().__getitem__(fname)
                 else:
-                    if callable(default):
-                        default = default(self)
-                    field_val = self._safe_get(fname, default)
+                    field_val = self._safe_get(fname, None)
+                    if field_val is None:
+                        if callable(default):
+                            default = default(self)
+                        field_val = default
                 return field_val
             else:
                 return None
@@ -314,7 +316,7 @@ class DumpyMeta(type):
 
     def _new_simple(cls, clsname, bases, clsdict, extra_base):
         try:
-            fmt = clsdict['__format__']
+            fmt = clsdict['__spec__']
         except KeyError:
             # No meta data, do not process this class
             return super().__new__(cls, clsname, bases, clsdict)
@@ -359,32 +361,32 @@ class DumpyMeta(type):
 
 
 class Int8(int, metaclass=DumpyMeta):
-    __format__ = 'b'
+    __spec__ = 'b'
 
 
 class UInt8(int, metaclass=DumpyMeta):
-    __format__ = 'B'
+    __spec__ = 'B'
 
 
 class Int16(int, metaclass=DumpyMeta):
-    __format__ = 'h'
+    __spec__ = 'h'
 
 
 class UInt16(int, metaclass=DumpyMeta):
-    __format__ = 'H'
+    __spec__ = 'H'
 
 
 class Int32(int, metaclass=DumpyMeta):
-    __format__ = 'i'
+    __spec__ = 'i'
 
 
 class UInt32(int, metaclass=DumpyMeta):
-    __format__ = 'I'
+    __spec__ = 'I'
 
 
 class Float(float, metaclass=DumpyMeta):
-    __format__ = 'f'
+    __spec__ = 'f'
 
 
 class Double(float, metaclass=DumpyMeta):
-    __format__ = 'd'
+    __spec__ = 'd'
