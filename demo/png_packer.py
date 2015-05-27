@@ -15,6 +15,12 @@ See http://www.w3.org/TR/PNG/ for the full spec of the PNG format.
 import sys
 import os
 import argparse
+import dumpy.config as dc
+
+# You can set the global endianness by assigning a ``struct`` endian character
+# to ``dumpy.config.ENDIAN`` **before** importing ``dumpy.types``.
+# See the documentation of the ``struct`` module for supported endians.
+dc.ENDIAN = '>'     # Big endian for PNG
 import dumpy.types as dt
 
 
