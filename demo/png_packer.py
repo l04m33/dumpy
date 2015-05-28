@@ -5,7 +5,7 @@ You can use this script to list the chunks in a PNG file, or embed/extract
 arbitrary files into/from PNG files. It has no dependency except ``Dumpy``
 itself.
 
-Invode with no argument to see the full usage.
+Invoke with no argument to see the full usage.
 
 See http://www.w3.org/TR/PNG/ for the full spec of the PNG format.
 
@@ -110,11 +110,11 @@ def get_unknown_data_count(obj):
     the ``data`` field."""
 
     # All ``Dumpy`` composite objects have a ``parent`` attribute, which is a
-    # weakref to the upper level objects. The ``parent`` is ``None`` if the
+    # weakref to the upper level object. The ``parent`` is ``None`` if the
     # object have no parent.
 
     # We are dealing with ``DataUnknown`` objects here, so the parent is a
-    # PNGChunk object. The length of the ``data`` field in ``DataUnknown``
+    # ``PNGChunk`` object. The length of the ``data`` field in ``DataUnknown``
     # is determined by the ``length`` field in ``PNGChunk``.
     # See http://www.w3.org/TR/PNG/#5Chunk-layout
     chunk_obj = obj.parent()
@@ -133,7 +133,7 @@ def get_chunk_data_type(obj):
     """Used by PNGChunk to determine which class to use when dealing with
     chunk data."""
 
-    # ``obj`` is a PNGChunk instance.
+    # ``obj`` is a ``PNGChunk`` instance.
     # Any field with a count larger than 1, or with a dynamic count,
     # will be turned into a ``list``. Here we convert the ``type`` field to
     # ``bytes``, to ease subsequent processing.
@@ -271,7 +271,7 @@ def pack_files(args):
 
 def extract_files(args):
     if args.png_file is None:
-        raise RuntimeError('No PNG file to pack into.')
+        raise RuntimeError('No PNG file to extract from.')
 
     if args.output is None:
         raise RuntimeError('Output directory not specified.')
@@ -292,7 +292,7 @@ def extract_files(args):
                 args.extract.remove(file_name)
 
     if len(args.extract) > 0:
-        print('Files not found:')
+        print('File(s) not found:')
         for f in args.extract:
             print('    {}'.format(repr(f)))
 
