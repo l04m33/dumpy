@@ -1,5 +1,6 @@
 import struct
 import weakref
+import collections
 from collections import abc
 from .config import ENDIAN
 
@@ -51,8 +52,12 @@ class NoDefault:
         raise RuntimeError('NoDefault cannot be instantiated')
 
 
-def field(name, tp, count=1, default=NoDefault):
-    return (name, tp, count, default)
+FieldInfo = collections.namedtuple(
+    'FieldInfo', ['name', 'tp', 'count', 'default', 'validator'])
+
+
+def field(name, tp, count=1, default=NoDefault, validator=None):
+    return (name, tp, count, default, validator)
 
 
 def counted_by(name):
@@ -130,42 +135,49 @@ class CompositeStructMixin:
             value.parent = weakref.ref(self)
         return value
 
+    @classmethod
+    def _validate(cls, fval, finfo):
+        if finfo.validator is not None:
+            finfo.validator(fval, finfo)
+
     def __getitem__(self, fname):
-        _ftype, count, default = self.__field_info__[fname]
-        ret = self._get_field(fname, count, default)
+        finfo = self.__field_info__[fname]
+        ret = self._get_field(fname, finfo.count, finfo.default)
         if ret is None:
             raise ValueError('Field {} cannot be read'.format(fname))
         return ret
 
     def __setitem__(self, fname, value):
-        ftype, count, default = self.__field_info__[fname]
+        finfo = self.__field_info__[fname]
 
-        if isinstance(ftype, VariableType):
-            ftype = ftype.get_type(self)
+        if isinstance(finfo.tp, VariableType):
+            ftype = finfo.tp.get_type(self)
+        else:
+            ftype = finfo.tp
 
-        if callable(count):
+        if callable(finfo.count):
             if not isinstance(value, abc.Sequence):
                 raise TypeError(
                     'Field {} needs a sequence'.format(repr(fname)))
             value = [self._normalize_composite(v, ftype) for v in value]
             super().__setitem__(fname, value)
         else:
-            if count > 1:
+            if finfo.count > 1:
                 if not isinstance(value, abc.Sequence):
                     raise TypeError(
                         'Field {} needs a sequence'.format(repr(fname)))
-                if len(value) > count:
+                if len(value) > finfo.count:
                     raise ValueError(
                         'Field {} needs {} values, but got {}'.format(
-                            repr(fname), count, len(value)))
-                elif len(value) < count and default is NoDefault:
+                            repr(fname), finfo.count, len(value)))
+                elif len(value) < finfo.count and finfo.default is NoDefault:
                     raise ValueError(
                         'Field {} needs {} values, but got {}'.format(
-                            repr(fname), count, len(value)))
+                            repr(fname), finfo.count, len(value)))
 
                 value = [self._normalize_composite(v, ftype) for v in value]
                 super().__setitem__(fname, value)
-            elif count == 1:
+            elif finfo.count == 1:
                 if isinstance(value, abc.Sequence):
                     raise TypeError(
                         'Field {} cannot accept a sequence'.format(repr(fname)))
@@ -178,8 +190,8 @@ class CompositeStructMixin:
     def pack(self):
         bin_list = []
         for fname in self.__fields__:
-            ftype, count, default = self.__field_info__[fname]
-            val = self._get_field(fname, count, default)
+            finfo = self.__field_info__[fname]
+            val = self._get_field(fname, finfo.count, finfo.default)
 
             if val is None:
                 continue
@@ -190,8 +202,10 @@ class CompositeStructMixin:
                 try:
                     packed = v.pack()
                 except AttributeError:
-                    if isinstance(ftype, VariableType):
-                        ftype = ftype.get_type(self)
+                    if isinstance(finfo.tp, VariableType):
+                        ftype = finfo.tp.get_type(self)
+                    else:
+                        ftype = finfo.tp
                     packed = ftype(v).pack()
                 bin_list.append(packed)
 
@@ -205,8 +219,8 @@ class CompositeStructMixin:
                     total_size, len(buf[offset:])))
 
         for fname in self.__fields__:
-            ftype, count, default = self.__field_info__[fname]
-            val = self._get_field(fname, count, default)
+            finfo = self.__field_info__[fname]
+            val = self._get_field(fname, finfo.count, finfo.default)
 
             if val is None:
                 continue
@@ -217,8 +231,10 @@ class CompositeStructMixin:
                 try:
                     v.pack_into(buf, offset)
                 except AttributeError:
-                    if isinstance(ftype, VariableType):
-                        ftype = ftype.get_type(self)
+                    if isinstance(finfo.tp, VariableType):
+                        ftype = finfo.tp.get_type(self)
+                    else:
+                        ftype = finfo.tp
                     v = ftype(v)
                     v.pack_into(buf, offset)
                 offset += v.size
@@ -238,18 +254,20 @@ class CompositeStructMixin:
             obj.parent = None
 
         for fname in cls.__fields__:
-            ftype, count, _default = cls.__field_info__[fname]
+            finfo = cls.__field_info__[fname]
 
             count_known = True
-            if callable(count):
-                real_count = count(obj)
+            if callable(finfo.count):
+                real_count = finfo.count(obj)
                 if isinstance(real_count, bool):
                     count_known = False
             else:
-                real_count = count
+                real_count = finfo.count
 
-            if isinstance(ftype, VariableType):
-                ftype = ftype.get_type(obj)
+            if isinstance(finfo.tp, VariableType):
+                ftype = finfo.tp.get_type(obj)
+            else:
+                ftype = finfo.tp
 
             if count_known:
                 val_list = []
@@ -258,20 +276,24 @@ class CompositeStructMixin:
                     offset += v.size
                     val_list.append(v)
 
-                if callable(count):
+                if callable(finfo.count):
+                    cls._validate(val_list, finfo)
                     super().__setitem__(obj, fname, val_list)
                 else:
                     if len(val_list) > 1:
+                        cls._validate(val_list, finfo)
                         super().__setitem__(obj, fname, val_list)
                     elif len(val_list) == 1:
+                        cls._validate(val_list[0], finfo)
                         super().__setitem__(obj, fname, val_list[0])
             else:
                 val_list = []
                 super().__setitem__(obj, fname, val_list)
-                while count(obj):
+                while finfo.count(obj):
                     v = ftype.unpack_from(buf, offset, obj)
                     offset += v.size
                     val_list.append(v)
+                cls._validate(val_list, finfo)
 
         return obj
 
@@ -285,14 +307,16 @@ class CompositeStructMixin:
     def size(self):
         size = 0
         for fname in self.__fields__:
-            ftype, count, default = self.__field_info__[fname]
-            val = self._get_field(fname, count, default)
+            finfo = self.__field_info__[fname]
+            val = self._get_field(fname, finfo.count, finfo.default)
 
             if val is None:
                 continue
 
-            if isinstance(ftype, VariableType):
-                ftype = ftype.get_type(self)
+            if isinstance(finfo.tp, VariableType):
+                ftype = finfo.tp.get_type(self)
+            else:
+                ftype = finfo.tp
 
             if isinstance(val, list):
                 for v in val:
@@ -357,9 +381,30 @@ class DumpyMeta(type):
 
         __fields__ = []
         __field_info__ = {}
-        for fname, ftype, count, default in fields:
+        for f in fields:
+            fname = f[0]
             __fields__.append(fname)
-            __field_info__[fname] = (ftype, count, default)
+
+            ftype = f[1]
+            ff = list(f[2:])
+
+            try:
+                count = ff.pop(0)
+            except IndexError:
+                count = 1
+
+            try:
+                default = ff.pop(0)
+            except IndexError:
+                default = NoDefault
+
+            try:
+                validator = ff.pop(0)
+            except IndexError:
+                validator = None
+
+            __field_info__[fname] = \
+                FieldInfo(fname, ftype, count, default, validator)
 
         clsdict['__fields__'] = __fields__
         clsdict['__field_info__'] = __field_info__

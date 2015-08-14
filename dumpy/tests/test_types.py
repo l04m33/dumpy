@@ -332,3 +332,19 @@ class TestCompositeDumpyMeta(unittest.TestCase):
             a['field']
         with self.assertRaises(ValueError):
             a.pack()
+
+    def test_validator(self):
+        def check_non_neg_num(num, _finfo):
+            if num < 0:
+                raise ValueError('num < 0')
+
+        class A(dict, metaclass=dtypes.DumpyMeta):
+            __field_specs__ = (
+                dtypes.field('misc', dtypes.Int8, validator=check_non_neg_num),
+            )
+
+        a = A.unpack(b'\x7f')
+        self.assertEqual(a['misc'], 127)
+
+        with self.assertRaises(ValueError):
+            a = A.unpack(b'\x8f')
