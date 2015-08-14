@@ -42,6 +42,13 @@ import dumpy.types as dt
 # kinds of chunks.
 #
 
+
+def check_png_signature(sig, _finfo):
+    sig_bytes = bytes(sig)
+    if sig_bytes != b'\x89\x50\x4e\x47\x0d\x0a\x1a\x0a':
+        raise ValueError('Bad PNG signature: {}'.format(repr(sig_bytes)))
+
+
 # We need to define a class for each composite type. The class
 # has to inherit from a mapping type (Usually the built-in ``dict``)
 # and use ``dumpy.types.DumpyMeta`` as its meta class.
@@ -61,7 +68,10 @@ class PNGSignature(dict, metaclass=dt.DumpyMeta):
         # function ``dumpy.types.field(...)`` to make the specs more clear.
 
         # Here we have a field named ``signature``, with a size of 8 bytes.
-        dt.field('signature', dt.UInt8, count=8),
+        # We can specify a validator callback for a field. When unpacking
+        # binary data, the validator will be called with the unpacked field
+        # value.
+        dt.field('signature', dt.UInt8, count=8, validator=check_png_signature),
     )
 
 
@@ -194,26 +204,16 @@ def flatten_list(l):
             yield e
 
 
-def unpack_png_file(png_file):
-    data = png_file.read()
-    png = PNGFile.unpack_from(data, 0)
-
-    # ``data`` should be empty at this point, but the PNG format seems to allow
-    # trailing bytes, so save the remaining bytes, just in case.
-    data = data[png.size:]
-
-    return (png, data)
-
-
 def read_png(png_file):
     with png_file:
-        data = png_file.read(8)
-        signature = PNGSignature.unpack(data)
-        if signature['signature'] != [137, 80, 78, 71, 13, 10, 26, 10]:
-            raise RuntimeError('Not a PNG file.')
-        png_file.seek(0)
-        png, extra_data = unpack_png_file(png_file)
-        return (png, extra_data)
+        data = png_file.read()
+        png = PNGFile.unpack_from(data, 0)
+
+        # ``data`` should be empty at this point, but the PNG format seems to allow
+        # trailing bytes, so save the remaining bytes, just in case.
+        data = data[png.size:]
+
+        return (png, data)
 
 
 def pack_file_into_dead_chunk(extra_file):
@@ -295,7 +295,6 @@ def extract_files(args):
     png, extra_data = read_png(args.png_file)
 
     files_to_extract = list(flatten_list(args.extract))
-    print(files_to_extract)
     for c in png['chunks']:
         if isinstance(c['data'], DataDEAD):
             file_name = bytes(c['data']['name']).decode()
