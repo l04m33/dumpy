@@ -240,27 +240,38 @@ class CompositeStructMixin:
         for fname in cls.__fields__:
             ftype, count, _default = cls.__field_info__[fname]
 
+            count_known = True
             if callable(count):
                 real_count = count(obj)
+                if isinstance(real_count, bool):
+                    count_known = False
             else:
                 real_count = count
 
             if isinstance(ftype, VariableType):
                 ftype = ftype.get_type(obj)
 
-            val_list = []
-            for i in range(real_count):
-                v = ftype.unpack_from(buf, offset, obj)
-                offset += v.size
-                val_list.append(v)
+            if count_known:
+                val_list = []
+                for i in range(real_count):
+                    v = ftype.unpack_from(buf, offset, obj)
+                    offset += v.size
+                    val_list.append(v)
 
-            if callable(count):
-                super().__setitem__(obj, fname, val_list)
-            else:
-                if len(val_list) > 1:
+                if callable(count):
                     super().__setitem__(obj, fname, val_list)
-                elif len(val_list) == 1:
-                    super().__setitem__(obj, fname, val_list[0])
+                else:
+                    if len(val_list) > 1:
+                        super().__setitem__(obj, fname, val_list)
+                    elif len(val_list) == 1:
+                        super().__setitem__(obj, fname, val_list[0])
+            else:
+                val_list = []
+                super().__setitem__(obj, fname, val_list)
+                while count(obj):
+                    v = ftype.unpack_from(buf, offset, obj)
+                    offset += v.size
+                    val_list.append(v)
 
         return obj
 

@@ -188,12 +188,20 @@ class TestCompositeDumpyMeta(unittest.TestCase):
             m.pack_into(b, 3)
 
     def test_variable_length_field(self):
+        def check_byte_continue(obj):
+            if len(obj['extra_bytes']) <= 0:
+                return True
+            else:
+                return obj['extra_bytes'][-1] > 0
+
         class A(dict, metaclass=dtypes.DumpyMeta):
             __field_specs__ = (
                 dtypes.field('len', dtypes.Int8,
                              default=dtypes.count_of('numbers')),
                 dtypes.field('numbers', dtypes.Int8,
                              count=dtypes.counted_by('len')),
+                dtypes.field('extra_bytes', dtypes.Int8,
+                             count=check_byte_continue),
             )
 
         a = A()
@@ -202,17 +210,23 @@ class TestCompositeDumpyMeta(unittest.TestCase):
         with self.assertRaises(TypeError):
             a['numbers'] = 1
 
+        with self.assertRaises(TypeError):
+            a['extra_bytes'] = 1
+
         a['numbers'] = [1, 2, 3, 4]
+        a['extra_bytes'] = [127, 126, 125, -1]
         self.assertEqual(a['len'], 4)
-        self.assertEqual(a.pack(), b'\x04\x01\x02\x03\x04')
+        self.assertEqual(a.pack(), b'\x04\x01\x02\x03\x04\x7f\x7e\x7d\xff')
         self.assertEqual(A.unpack(a.pack()).pack(), a.pack())
 
         a['numbers'] = []
-        self.assertEqual(a.pack(), b'\x00')
+        a['extra_bytes'] = [-1]
+        self.assertEqual(a.pack(), b'\x00\xff')
         self.assertEqual(A.unpack(a.pack()).pack(), a.pack())
 
         self.assertEqual(
-            A.unpack_from(b'\x02\x01\x02\x03\x04').pack(), b'\x02\x01\x02')
+            A.unpack_from(b'\x02\x01\x02\x03\xff\x04').pack(),
+            b'\x02\x01\x02\x03\xff')
 
     def test_variable_type(self):
         def get_type(obj):
