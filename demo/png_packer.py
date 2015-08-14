@@ -168,28 +168,41 @@ class PNGChunk(dict, metaclass=dt.DumpyMeta):
     }
 
 
+def check_chunk_continue(obj):
+    if len(obj['chunks']) <= 0:
+        return True
+    else:
+        last_chunk_type = bytes(obj['chunks'][-1]['type'])
+        return last_chunk_type != b'IEND'
+
+
+class PNGFile(dict, metaclass=dt.DumpyMeta):
+    __field_specs__ = (
+        dt.field('signature', PNGSignature),
+        dt.field('chunks', PNGChunk, count=check_chunk_continue),
+    )
+
+
 # ================== Data Structures end ==================
 
 
-def unpack_png_chunks(png_file):
-    data = png_file.read()
-    offset = 0
-    chunks = []
-    ended = False
+def flatten_list(l):
+    for e in l:
+        if isinstance(e, list):
+            yield from flatten_list(e)
+        else:
+            yield e
 
-    while not ended:
-        chunk = PNGChunk.unpack_from(data, offset)
-        chunks.append(chunk)
-        offset += chunk.size
-        chunk_type = bytes(chunk['type'])
-        if chunk_type == b'IEND':
-            ended = True
+
+def unpack_png_file(png_file):
+    data = png_file.read()
+    png = PNGFile.unpack_from(data, 0)
 
     # ``data`` should be empty at this point, but the PNG format seems to allow
     # trailing bytes, so save the remaining bytes, just in case.
-    data = data[offset:]
+    data = data[png.size:]
 
-    return (chunks, data)
+    return (png, data)
 
 
 def read_png(png_file):
@@ -198,8 +211,9 @@ def read_png(png_file):
         signature = PNGSignature.unpack(data)
         if signature['signature'] != [137, 80, 78, 71, 13, 10, 26, 10]:
             raise RuntimeError('Not a PNG file.')
-        chunks, extra_data = unpack_png_chunks(png_file)
-        return (signature, chunks, extra_data)
+        png_file.seek(0)
+        png, extra_data = unpack_png_file(png_file)
+        return (png, extra_data)
 
 
 def pack_file_into_dead_chunk(extra_file):
@@ -227,9 +241,9 @@ def list_chunks(args):
     if args.png_file is None:
         raise RuntimeError('No PNG file to list.')
 
-    signature, chunks, extra_data = read_png(args.png_file)
+    png, extra_data = read_png(args.png_file)
 
-    for chunk in chunks:
+    for chunk in png['chunks']:
         chunk_type = bytes(chunk['type'])
 
         print('Chunk: {} {:8} bytes'
@@ -252,18 +266,17 @@ def pack_files(args):
     if args.output is None:
         raise RuntimeError('Output file not specified.')
 
-    signature, chunks, extra_data = read_png(args.png_file)
+    png, extra_data = read_png(args.png_file)
 
+    files_to_pack = flatten_list(args.pack)
     with open(args.output, 'xb') as out_file:
-        for f in args.pack:
+        for f in files_to_pack:
             print('Packing {} ....'.format(repr(f.name)))
             with f:
                 new_chunk = pack_file_into_dead_chunk(f)
-                chunks.insert(-1, new_chunk)
+                png['chunks'].insert(-1, new_chunk)
 
-        out_file.write(signature.pack())
-        for c in chunks:
-            out_file.write(c.pack())
+        out_file.write(png.pack())
         out_file.write(extra_data)
 
     print('Done.')
@@ -279,21 +292,23 @@ def extract_files(args):
     if not os.path.isdir(args.output):
         raise RuntimeError('\'--output\' argument is not a directory.')
 
-    signature, chunks, extra_data = read_png(args.png_file)
+    png, extra_data = read_png(args.png_file)
 
-    for c in chunks:
+    files_to_extract = list(flatten_list(args.extract))
+    print(files_to_extract)
+    for c in png['chunks']:
         if isinstance(c['data'], DataDEAD):
             file_name = bytes(c['data']['name']).decode()
-            if file_name in args.extract:
+            if file_name in files_to_extract:
                 print('Extracting {} ....'.format(repr(file_name)))
                 full_name = os.path.join(args.output, file_name)
                 with open(full_name, 'xb') as out_file:
                     out_file.write(bytes(c['data']['data']))
-                args.extract.remove(file_name)
+                files_to_extract.remove(file_name)
 
-    if len(args.extract) > 0:
+    if len(files_to_extract) > 0:
         print('File(s) not found:')
-        for f in args.extract:
+        for f in files_to_extract:
             print('    {}'.format(repr(f)))
 
     print('Done.')
